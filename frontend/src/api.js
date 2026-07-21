@@ -1,5 +1,4 @@
-// Single place that talks to the backend. Uses same-origin relative URLs which
-// the Vite dev server proxies to FastAPI (see vite.config.js).
+// Backend client. Same-origin relative URLs are proxied to FastAPI by Vite.
 const BASE = import.meta.env.VITE_API_BASE || "";
 
 async function handle(res) {
@@ -26,14 +25,11 @@ export const api = {
     return fetch(`${BASE}/api/sessions`, { method: "POST", body: form }).then(handle);
   },
 
-  nextQuestion: (sessionId) =>
-    fetch(`${BASE}/api/sessions/${sessionId}/next-question`).then(handle),
-
-  submitAnswer: (sessionId, questionId, answer) =>
-    fetch(`${BASE}/api/sessions/${sessionId}/answers`, {
+  sendMessage: (sessionId, text) =>
+    fetch(`${BASE}/api/sessions/${sessionId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question_id: questionId, answer }),
+      body: JSON.stringify({ text }),
     }).then(handle),
 
   getSummary: (sessionId) =>

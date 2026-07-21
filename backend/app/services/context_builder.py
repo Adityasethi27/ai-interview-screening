@@ -19,7 +19,7 @@ from app.services.roles import get_role
 def select_focus_topics(role_id: str, profile: dict) -> list[str]:
     role = get_role(role_id)
     seed = role["seed_topics"]
-    n = settings.NUM_QUESTIONS
+    n = settings.NUM_TOPICS
 
     prompt = f"""You are designing a technical interview for the role: "{role['label']}".
 

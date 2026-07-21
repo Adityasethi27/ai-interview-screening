@@ -1,8 +1,8 @@
-# Demo Video Script (~4 minutes) — side by side
+# Demo Video Script (~3–4 minutes) — side by side
 
 A shot-by-shot script with **what to SAY** (voiceover) next to **what to SHOW/DO**
-(on screen). It covers everything the assignment asks the video to demonstrate:
-the complete system flow, the key features, and how the components interact.
+(on screen). Covers everything the assignment asks the video to demonstrate: the
+complete system flow, the key features, and how the components interact.
 
 ## Pre-flight (before hitting record)
 ```bash
@@ -10,10 +10,13 @@ the complete system flow, the key features, and how the components interact.
 # App:  http://localhost:5173
 # Docs: http://127.0.0.1:8000/docs
 ```
-- Have a technical resume PDF ready on the desktop.
+- Have a technical resume PDF (or text) ready.
 - Zoom the browser to ~110% so text is readable on video.
-- Optional: run one full interview first so the LLM responses are "warm", then
-  record a second, fresh run to avoid waiting on camera.
+- **Warm-up run first:** do one full interview, then record a fresh one — this
+  avoids waiting on model latency, and (importantly) confirms you have Gemini
+  quota left today. If turns get slow or the final report says *"rating derived
+  from live assessments"*, your free-tier daily quota is exhausted — see the
+  README's free-tier note (use a billing-enabled key, or wait for reset).
 
 ---
 
@@ -21,28 +24,28 @@ the complete system flow, the key features, and how the components interact.
 
 | # | Time | 🎙️ SAY (voiceover) | 🖥️ SHOW / DO (screen) |
 |---|------|--------------------|------------------------|
-| 1 | 0:00–0:15 | "Hi, this is my submission for the AI/ML & Backend intern assignment — an AI-powered, role-based candidate screening system. The interview questions aren't predefined; they're generated live from the candidate's resume and a role-specific knowledge base using a RAG pipeline." | Setup screen visible. Move the cursor across the header and the 3-step progress bar (Candidate & Role → Interview → Summary). |
-| 2 | 0:15–0:45 | "Quick architecture overview. A React frontend talks to a FastAPI backend with thin routes and a dedicated service layer. The RAG layer uses Chroma with one vector collection per role, and Gemini for embeddings and generation. Sessions are persisted in a database, and every question stores exactly what it was generated from — full traceability." | Show the **README architecture diagram**. Point at each layer: Frontend → API → Services → RAG/Chroma + SQLite → Gemini. |
-| 3 | 0:45–1:10 | "Let's run it. I'll enter the candidate's name, choose the Backend Engineer role, and upload a resume. On begin, the backend parses the resume, extracts a structured profile, and selects focus topics tailored to this candidate." | Type a name → click **Backend Engineer** → **Upload PDF**, pick the resume → **Begin interview**. Let the "Analysing resume…" state show. |
-| 4 | 1:10–1:35 | "Here's the resume actually influencing the interview. On the left, the system pulled out the candidate's skills, technologies, and inferred seniority — and it chose these focus topics specifically for them. Notice the topics blend the role with their real background." | Hover down the **left profile panel**: Skills chips → Technologies chips → seniority badge → the numbered **Focus topics** list. |
-| 5 | 1:35–2:15 | "Now the key part — question generation. This question is grounded in the knowledge base and personalised to the candidate's own stack. And I can prove the grounding: expanding 'Retrieved context' shows the exact knowledge-base chunks, with similarity scores, that produced this question. That's the traceability — Context leads to Question." | Read the **question** aloud. Click **"▸ Retrieved context · N chunks (traceability)"** to expand. Point to a source filename and its **score**. |
-| 6 | 2:15–2:45 | "I'll answer it. On submit, the system grades the answer from 0 to 10 against that same retrieved context and gives specific feedback — so questions and evaluation stay consistent." | Type a solid answer → **Submit answer**. Wait for the **score circle + feedback**. Point at the score, read one line of feedback. |
-| 7 | 2:45–3:05 | "I click Next and the flow continues — each new question is aware of previous answers, so it can adapt and probe deeper. I'll move through the rest quickly." | Click **Next question →**. Briefly answer 1–2 more, clicking through. Let the progress bar advance. |
-| 8 | 3:05–3:40 | "After the last answer, the system produces the final structured output: an overall score, a hire verdict, concrete strengths and areas to improve, a narrative assessment, and the full transcript — where every question still shows what it was grounded in." | Land on the **Summary** screen. Scroll slowly: score + verdict → Strengths / Areas to improve → narrative → the **transcript**, pausing on a "Grounded in:" line. |
-| 9 | 3:40–4:00 | "Under the hood it's fully modular — thin API routes, a service layer for business logic, a self-contained RAG package, and relational persistence, all configured through environment variables, with Docker support and unit tests. Thanks for watching." | Open **http://127.0.0.1:8000/docs** to show the clean API. Optionally flash the repo file tree. End on the README. |
+| 1 | 0:00–0:15 | "This is my submission for the AI/ML & Backend intern assignment — an AI-powered candidate screening system. Instead of a fixed quiz, it runs a live, adaptive interview with an agent called Ava, whose questions come from the candidate's resume and a role-specific knowledge base via RAG." | The minimal setup screen. Move the cursor across the title and the role options. |
+| 2 | 0:15–0:45 | "Architecture: a React chat frontend talks to a FastAPI backend with thin routes and a service layer. The RAG layer uses Chroma with one vector collection per role, and Gemini for embeddings and generation. Everything persists to a database, and each question stores exactly what it was grounded in." | Show the **README architecture diagram**. Point at each layer: Frontend → API → Services → RAG/Chroma + SQLite → Gemini. |
+| 3 | 0:45–1:05 | "Let's run it. I enter a name, pick the Backend Engineer role, and give it my resume. On start, the backend parses the resume, extracts a structured profile, and builds a personalised topic plan." | Type a name → select **Backend Engineer** → **Upload PDF** (or Paste text) → **Start interview**. Let the "Preparing…" state show. |
+| 4 | 1:05–1:35 | "Ava opens with a greeting that references my background, then a first question grounded in the knowledge base and angled at my stack — here, FastAPI. Notice it's a real conversation, not a form." | The chat loads; Ava's opening message types out. Read/point to how it references the candidate's technologies. |
+| 5 | 1:35–2:20 | "Now the key behaviour — it's adaptive. When I give a strong, on-topic answer, Ava acknowledges it and moves to the next topic. Watch what happens when I'm vague instead…" | Type a solid answer → send (show the typing dots). Ava compliments + advances. Then on the next question type a deliberately **weak** answer (e.g. "caching just makes things faster"). |
+| 6 | 2:20–2:45 | "…it doesn't just move on — it asks a targeted follow-up to probe the gap, exactly like a real interviewer. Follow-ups are capped so the session always ends." | Show Ava's **follow-up** question drilling into the weak answer. Answer it properly this time; Ava advances. |
+| 7 | 2:45–3:20 | "After a few topics it wraps up and produces a qualitative assessment: an overall rating band, per-topic ratings, concrete strengths and gaps, and a panel narrative — plus the full transcript, where each turn shows what it was grounded in." | Click **See your assessment →**. Scroll the report: rating band → per-topic ratings → strengths / areas to improve → panel note → expand **Show full transcript** and point to a "grounded in …" line. |
+| 8 | 3:20–3:45 | "Under the hood it's modular and grounded: thin API routes, a conversation agent that assesses each answer and decides advance-vs-follow-up, a self-contained RAG package, and SQLite persistence — all configured through environment variables, with Docker and tests." | Open **http://127.0.0.1:8000/docs** to show the clean API (sessions, message, summary). Optionally flash the repo file tree. |
 
 ---
 
 ## Delivery tips
 - **One take is fine.** If you fumble, pause two seconds and repeat the line; trim later.
-- Keep the **cursor moving to whatever you're describing** — reviewers follow the mouse.
-- The live LLM bits (steps 3, 5, 6) take a few seconds. Either let the loading
-  state show (it reads as intentional) or record and trim the dead air.
+- Keep the **cursor on whatever you're describing** — reviewers follow the mouse.
+- Steps 3, 5, 6 make live model calls (a few seconds each). Let the typing dots
+  show, or trim the wait in editing.
+- To reliably show a follow-up, give one clearly weak/one-line answer on purpose.
 
 ## Three lines to be sure you say
-1. "Questions are **not predefined** — resume → topics → retrieved knowledge → question."
-2. "The **resume influences** topic selection, difficulty, and direction."
-3. "Full **traceability**: Context → Question → Answer → Storage."
+1. "Questions are **not predefined** — resume → topic plan → retrieved knowledge → live question."
+2. "It's **adaptive**: compliment and advance on a strong answer, probe with a **follow-up** on a weak one."
+3. "Full **traceability** and a **qualitative** final assessment."
 
 ---
 

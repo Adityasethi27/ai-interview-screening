@@ -30,7 +30,11 @@ class InterviewSession(Base):
     # Resume-derived context (parsed once, reused throughout the session).
     resume_text: Mapped[str] = mapped_column(Text, default="")
     resume_profile: Mapped[dict] = mapped_column(JSON, default=dict)  # skills, techs, domains...
-    focus_topics: Mapped[list] = mapped_column(JSON, default=list)
+    focus_topics: Mapped[list] = mapped_column(JSON, default=list)  # the coverage plan
+
+    # Adaptive-agent state: where we are in the plan and how deep we've probed.
+    topic_index: Mapped[int] = mapped_column(Integer, default=0)
+    followup_depth: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -57,6 +61,7 @@ class Question(Base):
     text: Mapped[str] = mapped_column(Text)
     topic: Mapped[str] = mapped_column(String(255), default="")
     difficulty: Mapped[str] = mapped_column(String(32), default="medium")
+    kind: Mapped[str] = mapped_column(String(16), default="question")  # question | follow_up
 
     # Traceability: what retrieval query + KB chunks generated this question.
     retrieval_query: Mapped[str] = mapped_column(Text, default="")
@@ -79,8 +84,9 @@ class Answer(Base):
     )
     text: Mapped[str] = mapped_column(Text)
 
-    # Lightweight per-answer evaluation produced by the LLM grader.
-    score: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-10
+    # Per-answer assessment produced live by the interviewer agent.
+    quality: Mapped[str] = mapped_column(String(32), default="")  # strong|good|partial|weak|confused|off_topic
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-10 (internal)
     feedback: Mapped[str] = mapped_column(Text, default="")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

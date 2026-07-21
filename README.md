@@ -1,16 +1,18 @@
 # AI Interview Screening System
 
 An AI-powered, **role-based candidate screening system**. A candidate uploads a
-resume and picks a target role; the system parses the resume, decides what to
+resume and picks a target role, then has a **live, conversational interview** with
+"Ava", an adaptive interviewer. The system parses the resume, decides what to
 evaluate, retrieves grounded material from a **role-specific knowledge base
-(RAG)**, and runs a structured technical interview whose questions are
-**dynamically generated** — influenced by both the role and the candidate's own
-background. Every answer is graded and the session ends with a structured
-assessment.
+(RAG)**, and generates each turn **dynamically** — influenced by the role, the
+candidate's background, and the conversation so far. It ends with a **qualitative
+assessment**.
 
-> Questions are never predefined. They are produced live from
-> `resume → focus topics → retrieved knowledge → generated question`, and each
-> question stores the exact context that produced it (full traceability).
+> Questions are never predefined. Ava reads each answer and *decides* the next
+> move: a strong answer earns a quick compliment and a new topic; a weak or
+> confused one triggers a targeted **follow-up** that probes the gap. Every turn
+> is grounded in retrieved knowledge and stored with the exact context that
+> produced it (full traceability).
 
 ---
 
@@ -32,18 +34,21 @@ assessment.
 
 ## Key features
 
-- **Resume-aware interviews.** The resume meaningfully drives topic selection,
-  question difficulty, and interview direction — not just cosmetic mentions.
-- **RAG-grounded question generation.** Questions are grounded in a role-specific
-  corpus (one Chroma collection per role), avoiding generic, hallucinated prompts.
+- **Conversational, adaptive interview.** A real chatbot flow: Ava assesses each
+  answer live and either compliments + advances, or asks a pointed **follow-up**
+  on a weakness/confusion (capped so a session always ends).
+- **Resume-aware.** The resume drives topic selection, difficulty, and the
+  direction of the conversation — not just cosmetic mentions.
+- **RAG-grounded.** Every turn is grounded in a role-specific corpus (one Chroma
+  collection per role), avoiding generic, hallucinated prompts.
 - **Full traceability.** Each question persists its retrieval query and the exact
-  knowledge-base chunks (with similarity scores) that produced it. The UI surfaces
-  this under every question.
-- **Adaptive question flow.** Each new question is aware of previous Q&A and can
-  probe deeper on weak areas.
-- **Automatic grading + final assessment.** Every answer gets a 0–10 score and
-  feedback grounded in the same context; the session produces a verdict,
-  strengths, gaps, and a narrative.
+  knowledge-base chunks (with similarity scores) that produced it.
+- **Qualitative final assessment.** Instead of a bare number, the session ends
+  with a rating band (*Needs Work → Developing → Satisfactory → Strong →
+  Exceptional*), per-topic ratings, strengths, gaps and a narrative — all
+  evidence-based.
+- **Resilient to free-tier limits.** Model calls parse JSON defensively, back off
+  on rate limits, and **roll over to fallback models** when one hits its daily cap.
 - **Clean, modular architecture.** Thin API layer, dedicated service layer, RAG
   package, relational persistence — configured entirely via environment variables.
 - **Runs out of the box.** Ships with an original, concept-accurate knowledge base
@@ -57,22 +62,21 @@ assessment.
 flowchart TB
     subgraph FE["Frontend — React + Vite"]
         UI1[Setup: resume + role]
-        UI2[Interview: Q / A / traceability]
-        UI3[Summary: scores + verdict]
+        UI2[Chat: adaptive interview + traceability]
+        UI3[Report: qualitative assessment]
     end
 
     subgraph API["Backend — FastAPI (thin routes)"]
-        R1["/api/sessions"]
-        R2["/api/sessions/:id/next-question"]
-        R3["/api/sessions/:id/answers"]
-        R4["/api/sessions/:id/summary"]
+        R1["POST /api/sessions"]
+        R2["POST /api/sessions/:id/message"]
+        R4["GET /api/sessions/:id/summary"]
     end
 
     subgraph SVC["Service layer (business logic)"]
         RP[Resume parser]
         CB[Context builder<br/>focus-topic selection]
-        QG[Question generator]
-        EV[Answer grader + analysis]
+        QG[Conversation agent<br/>assess + decide + reply]
+        EV[Qualitative analysis]
         IN[Interview orchestrator]
     end
 
@@ -133,15 +137,17 @@ The system implements the required flow as an explicit, traceable pipeline:
    (role + topic + candidate skills/tech) and fetch the top-k grounded chunks with
    relevance scores.
 
-5. **Question generation** — the LLM writes one question grounded in the retrieved
-   chunks, tailored to the candidate, aware of prior Q&A, at difficulty scaled to
-   seniority. The retrieval query + chunks are persisted with the question.
+5. **Conversational turn (adaptive)** — for each candidate answer, the interviewer
+   agent (`services/conversation.py`) sees the retrieved context + full history and
+   returns structured control data: an **assessment** of the answer
+   (strong/good/partial/weak/confused/off-topic), an **action**
+   (`advance` / `follow_up` / `conclude`), and the natural chat **reply**. A strong
+   answer advances to the next topic; a weak/confused one is probed with a
+   follow-up (capped per topic). The reply + its grounding chunks are persisted.
 
-6. **Response handling** — answers are stored and graded (0–10 + feedback) against
-   the same context.
-
-7. **Final output** — an aggregated, structured summary: overall score, verdict,
-   strengths, areas to improve, narrative, and the full traceable transcript.
+6. **Final output** — a holistic, **qualitative** assessment: an overall rating
+   band, per-topic ratings, strengths, areas to improve, a narrative, and the full
+   traceable transcript.
 
 `Context → Question → Answer → Storage` is preserved end to end.
 
@@ -153,7 +159,7 @@ The system implements the required flow as an explicit, traceable pipeline:
 |---|---|---|
 | Frontend | **React + Vite** | Fast dev loop; clear component-per-stage state machine. |
 | Backend | **FastAPI** | Async, typed, Pydantic validation, auto OpenAPI docs. |
-| LLM + embeddings | **Google Gemini** (`gemini-2.5-flash`, `gemini-embedding-001`) | Strong quality/latency for generation + grading; unified provider. |
+| LLM + embeddings | **Google Gemini** (`gemini-flash-latest` + fallbacks, `gemini-embedding-001`) | Strong quality/latency for a live chat; unified provider; auto model-rollover on rate limits. |
 | Vector store | **Chroma** (persistent) | Local, zero-infra, per-role collections, metadata + scored retrieval. |
 | Relational store | **SQLite + SQLAlchemy 2.0** | Zero-config persistence; swap `DATABASE_URL` for Postgres in prod. |
 | Chunking | **LangChain text splitters** | Context-preserving recursive splitting with overlap. |
@@ -177,11 +183,11 @@ ai-interview-screening/
 │   │   │   ├── retriever.py       # resume-aware query building + retrieval
 │   │   │   └── vectorstore.py     # per-role Chroma collections
 │   │   └── services/
-│   │       ├── llm.py             # Gemini chat/embeddings + robust JSON parsing
+│   │       ├── llm.py             # Gemini chat/embeddings + JSON parsing + model fallback
 │   │       ├── resume_parser.py   # PDF text + LLM profile extraction
-│   │       ├── context_builder.py # focus-topic selection
-│   │       ├── question_gen.py    # grounded question generation
-│   │       ├── analysis.py        # answer grading + final summary
+│   │       ├── context_builder.py # focus-topic selection (the coverage plan)
+│   │       ├── conversation.py    # adaptive interviewer agent (assess + decide + reply)
+│   │       ├── analysis.py        # qualitative holistic assessment
 │   │       ├── interview.py       # orchestration + persistence
 │   │       └── roles.py           # role registry
 │   ├── knowledge_base/            # role corpora (md/txt/pdf)
@@ -192,9 +198,10 @@ ai-interview-screening/
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                # stage state machine
+│   │   ├── App.jsx                # stage state machine (setup → chat → report)
 │   │   ├── api.js                 # backend client
-│   │   └── components/            # Setup / Interview / Summary / Profile / Stepper
+│   │   ├── hooks/useTypewriter.js # live "typing" reveal for Ava's messages
+│   │   └── components/            # Setup / Chat / Message / Summary
 │   ├── vite.config.js             # dev proxy to backend
 │   └── Dockerfile
 ├── docker-compose.yml
@@ -251,14 +258,13 @@ Base URL: `http://127.0.0.1:8000` · Interactive docs at `/docs`.
 |---|---|---|
 | `GET` | `/health` | Liveness + active model. |
 | `GET` | `/api/roles` | List selectable roles. |
-| `POST` | `/api/sessions` | Start a session. Multipart: `role`, `candidate_name`, and `resume_file` (PDF/txt) **or** `resume_text`. Returns profile + focus topics. |
-| `GET` | `/api/sessions/{id}/next-question` | Generate/return the next question (with retrieved context). `finished` when done. |
-| `POST` | `/api/sessions/{id}/answers` | Submit `{question_id, answer}`; returns score + feedback. |
-| `GET` | `/api/sessions/{id}/summary` | Final structured assessment + full transcript. |
+| `POST` | `/api/sessions` | Start a session. Multipart: `role`, `candidate_name`, and `resume_file` (PDF/txt) **or** `resume_text`. Returns profile, focus topics, and Ava's **opening message**. |
+| `POST` | `/api/sessions/{id}/message` | One conversational turn. Body `{text}` (the candidate's answer). Returns `{reply, done}`. |
+| `GET` | `/api/sessions/{id}/summary` | Final qualitative assessment + full transcript. |
 
-Endpoints map 1:1 to the interview lifecycle; validation errors return clear
-`4xx` with a JSON `detail`, and the service layer is idempotent (re-fetching a
-question or re-submitting an answer is safe).
+Endpoints map to the conversation lifecycle; validation errors return clear
+`4xx` with a JSON `detail`. Turns are stateful on the server (the session tracks
+plan position + follow-up depth), so the client only ever posts the latest answer.
 
 ---
 
@@ -269,15 +275,19 @@ question or re-submitting an answer is safe).
 - **Resume-aware retrieval queries.** Instead of a generic "role questions" query,
   each query fuses role + topic + the candidate's own skills, so the *retrieved
   context itself* is personalised before generation even happens.
+- **Adaptive turns over fixed questions.** The interviewer decides `advance` vs
+  `follow_up` vs `conclude` from a live assessment of each answer — with hard caps
+  (max questions, max follow-ups per topic) so a session always terminates.
 - **Traceability is first-class.** `retrieval_query` and `context_sources` are
   columns on `questions`, not logs. You can always answer "why was this asked?".
-- **Grounded grading.** Answers are scored against the same chunks that generated
-  the question, keeping questions and evaluation consistent.
-- **LLM resilience.** All model calls parse JSON defensively (code-fence/prose
-  tolerant) and have deterministic fallbacks, so a single bad response never
-  breaks the interview.
-- **Config over code.** Models, chunking, `k`, question count, DB URL, CORS — all
-  env vars, so the same code runs locally, in Docker, or against Postgres.
+- **Qualitative evaluation.** The finale reports a rating *band* + per-topic
+  ratings (an internal numeric average backs the fallback), which reads more like
+  a human panel than a bare score.
+- **LLM resilience.** Model calls parse JSON defensively (code-fence/prose
+  tolerant), back off on 429s, and **roll over to fallback models** on daily-cap
+  exhaustion; deterministic fallbacks mean a bad response never breaks the chat.
+- **Config over code.** Models + fallbacks, chunking, `k`, question caps, DB URL,
+  CORS — all env vars, so the same code runs locally, in Docker, or against Postgres.
 - **Thin routes, fat services.** Business logic and persistence live in the
   service layer; routes stay trivial and testable.
 
@@ -306,27 +316,41 @@ cd backend && python -m scripts.ingest_kb ai_ml_engineer
 cd backend && python -m pytest -q      # offline unit tests (no API key needed)
 ```
 Covers JSON extraction, resume-aware query construction, the role registry, and
-profile normalisation/fallback. The full pipeline was additionally validated
-end-to-end against the running API with a real resume.
+profile normalisation/fallback. The full conversational flow (adaptive
+follow-ups, compliments, conclusion, qualitative report) was additionally
+validated end-to-end against the running API and in the browser with a real resume.
 
 ---
 
 ## Creative extensions
 
-Beyond the baseline, this build adds: **automatic per-answer grading with
-feedback**, a **final verdict + strengths/gaps assessment**, **visible retrieval
-traceability** per question, **resume-aware retrieval queries** (personalising the
-context, not just the prompt), **difficulty scaled to inferred seniority**,
-**adaptive follow-ups** using conversation history, and **role-scoped vector
-collections** for clean multi-role support.
+Beyond the baseline, this build adds: a **conversational, adaptive interviewer**
+("Ava") that probes weaknesses and compliments strong answers; a **qualitative
+rating band** + per-topic ratings instead of a bare score; **resume-aware
+retrieval queries** (personalising the *context*, not just the prompt);
+**difficulty scaled to inferred seniority**; **visible retrieval traceability**;
+**role-scoped vector collections**; and **automatic model rollover** so a free-tier
+daily cap on one model doesn't break the session.
+
+---
+
+## A note on Gemini free-tier limits
+
+Gemini's free tier caps requests **per model, per day**. One full interview is
+~9–12 model calls, so heavy testing can exhaust a model's daily quota — you'll see
+turns slow down or the final report fall back to *"rating derived from live
+assessments"*. Mitigations built in: automatic **fallback models** (`LLM_FALLBACKS`)
+and tunable **`MAX_QUESTIONS`**. For a smooth demo, use an API key with billing
+enabled, or record after the daily quota resets.
 
 ---
 
 ## Demo video
 
 A short walkthrough demonstrates the complete flow end-to-end: resume upload →
-role selection → parsed profile & chosen focus topics → grounded questions with
-visible retrieved context → answering and live grading → final structured summary.
+role selection → the **live adaptive chat** (compliments, follow-ups, visible
+retrieved context) → the **qualitative assessment** report. See
+[`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) for a timed, side-by-side shot list.
 
 > _Add the recorded demo link here._
 ```

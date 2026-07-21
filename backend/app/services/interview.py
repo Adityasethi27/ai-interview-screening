@@ -1,12 +1,8 @@
-"""Interview orchestration — the service layer that sequences the whole
-pipeline and owns all persistence. API routes stay thin; this is where the
-business logic lives.
+"""Interview orchestration for the adaptive conversational agent.
 
-Lifecycle:
-    start_session() -> parse resume, build profile, pick focus topics
-    next_question()  -> RAG retrieve -> generate -> persist Question
-    submit_answer()  -> persist Answer + grade it
-    finalize()       -> aggregate transcript -> LLM summary -> persist
+Owns session state + persistence; delegates the "what to say next" decision to
+`conversation.py`. Each candidate message drives exactly one turn:
+    record answer + assessment -> decide advance/follow_up/conclude -> next message
 """
 from __future__ import annotations
 
@@ -17,25 +13,60 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import Answer, InterviewSession, Question
 from app.rag.retriever import retrieve_for_topic
-from app.services import analysis, question_gen
+from app.services import analysis, conversation
 from app.services.context_builder import select_focus_topics
 from app.services.resume_parser import build_profile
 from app.services.roles import get_role
 
 
+# ----------------------------------------------------------------- helpers
+def _sorted_questions(session: InterviewSession) -> list[Question]:
+    return sorted(session.questions, key=lambda q: q.order_index)
+
+
+def _history(session: InterviewSession) -> list[dict]:
+    turns: list[dict] = []
+    for q in _sorted_questions(session):
+        turns.append({"role": "interviewer", "text": q.text})
+        if q.answer is not None:
+            turns.append({"role": "candidate", "text": q.answer.text})
+    return turns
+
+
+def _last_unanswered(session: InterviewSession) -> Question | None:
+    for q in reversed(_sorted_questions(session)):
+        if q.answer is None:
+            return q
+    return None
+
+
+def _context_payload(chunks: list[dict]) -> list[dict]:
+    return [
+        {"source": c["source"], "snippet": c["snippet"][:400], "score": c["score"]}
+        for c in chunks
+    ]
+
+
+def _plan(session: InterviewSession) -> list[str]:
+    return session.focus_topics or []
+
+
+# ----------------------------------------------------------------- lifecycle
 def start_session(
     db: Session, *, role_id: str, resume_text: str, candidate_name: str
 ) -> InterviewSession:
-    role = get_role(role_id)  # raises KeyError if unknown
+    role = get_role(role_id)
     profile = build_profile(resume_text, role["label"])
-    focus_topics = select_focus_topics(role_id, profile)
+    topics = select_focus_topics(role_id, profile)[: settings.NUM_TOPICS]
 
     session = InterviewSession(
         candidate_name=candidate_name or "Candidate",
         role=role_id,
         resume_text=resume_text[:20000],
         resume_profile=profile,
-        focus_topics=focus_topics,
+        focus_topics=topics,
+        topic_index=0,
+        followup_depth=0,
         status="in_progress",
     )
     db.add(session)
@@ -44,104 +75,126 @@ def start_session(
     return session
 
 
-def _answered_count(session: InterviewSession) -> int:
-    return sum(1 for q in session.questions if q.answer is not None)
+def open_conversation(db: Session, session: InterviewSession) -> str:
+    """Create and persist the interviewer's opening message (greeting + Q1)."""
+    if session.questions:  # already opened (idempotent)
+        return _sorted_questions(session)[0].text
 
-
-def _transcript(session: InterviewSession) -> list[dict]:
-    items = []
-    for q in session.questions:
-        items.append(
-            {
-                "order_index": q.order_index,
-                "topic": q.topic,
-                "difficulty": q.difficulty,
-                "question": q.text,
-                "answer": q.answer.text if q.answer else None,
-                "score": q.answer.score if q.answer else None,
-                "feedback": q.answer.feedback if q.answer else None,
-                "context_sources": q.context_sources,
-            }
-        )
-    return items
-
-
-def next_question(db: Session, session: InterviewSession) -> Question | None:
-    """Generate & persist the next question, or None if the interview is done."""
-    total = settings.NUM_QUESTIONS
-    existing = sorted(session.questions, key=lambda q: q.order_index)
-
-    # If the most recent question is still unanswered, return it (idempotent).
-    if existing and existing[-1].answer is None:
-        return existing[-1]
-
-    order_index = len(existing)
-    if order_index >= total or order_index >= len(session.focus_topics):
-        return None
-
+    plan = _plan(session)
     role = get_role(session.role)
-    topic = session.focus_topics[order_index]
-
-    # RAG: retrieve grounded context for this topic + candidate.
+    topic = plan[0] if plan else "core concepts"
     query, chunks = retrieve_for_topic(session.role, topic, session.resume_profile)
 
-    previous_qa = _transcript(session)
-    generated = question_gen.generate_question(
+    reply = conversation.opening_turn(
         role_label=role["label"],
-        topic=topic,
+        candidate_name=session.candidate_name,
         profile=session.resume_profile,
-        context_chunks=chunks,
-        previous_qa=previous_qa,
-        order_index=order_index,
+        topic=topic,
+        context=chunks,
     )
-
-    question = Question(
+    q = Question(
         session_id=session.id,
-        order_index=order_index,
-        text=generated["question"],
-        topic=generated["topic"],
-        difficulty=generated["difficulty"],
+        order_index=0,
+        text=reply,
+        topic=topic,
+        kind="question",
+        difficulty=session.resume_profile.get("seniority", "mid"),
         retrieval_query=query,
-        context_sources=[
-            {"source": c["source"], "snippet": c["snippet"][:400], "score": c["score"]}
-            for c in chunks
-        ],
+        context_sources=_context_payload(chunks),
     )
-    db.add(question)
+    db.add(q)
     db.commit()
-    db.refresh(question)
-    return question
+    return reply
 
 
-def submit_answer(db: Session, session: InterviewSession, *, question_id: str, answer_text: str):
-    question = next((q for q in session.questions if q.id == question_id), None)
-    if question is None:
-        raise KeyError("question not found in this session")
-    if question.answer is not None:
-        # Idempotent: return the existing evaluation.
-        return question.answer
+def handle_message(db: Session, session: InterviewSession, text: str) -> dict:
+    """Process one candidate answer; return {reply, done}."""
+    if session.status == "completed":
+        return {"reply": "This interview has already concluded.", "done": True}
 
+    current_q = _last_unanswered(session)
+    if current_q is None:
+        # No pending question — nothing to answer.
+        return {"reply": "Let's continue.", "done": False}
+
+    plan = _plan(session)
     role = get_role(session.role)
-    evaluation = analysis.evaluate_answer(
-        question=question.text,
-        answer=answer_text,
-        topic=question.topic,
-        context_chunks=question.context_sources,
-    )
-    answer = Answer(
-        question_id=question.id,
-        text=answer_text,
-        score=evaluation["score"],
-        feedback=evaluation["feedback"],
-    )
-    db.add(answer)
-    db.commit()
-    db.refresh(answer)
+    idx = session.topic_index
+    current_topic = plan[idx] if idx < len(plan) else current_q.topic
+    next_topic = plan[idx + 1] if (idx + 1) < len(plan) else None
 
-    # Auto-finalise when the last expected answer arrives.
-    if _answered_count(session) >= min(settings.NUM_QUESTIONS, len(session.focus_topics)):
+    # Reuse the current question's stored context; retrieve fresh for the next topic.
+    current_context = current_q.context_sources or []
+    next_context: list[dict] = []
+    next_query = ""
+    if next_topic:
+        next_query, next_chunks = retrieve_for_topic(
+            session.role, next_topic, session.resume_profile
+        )
+        next_context = _context_payload(next_chunks)
+
+    asked_count = len(session.questions)
+
+    result = conversation.interview_turn(
+        role_label=role["label"],
+        profile=session.resume_profile,
+        plan=plan,
+        history=_history(session),
+        candidate_answer=text,
+        current_topic=current_topic,
+        next_topic=next_topic,
+        current_context=current_context,
+        next_context=next_context,
+        asked_count=asked_count,
+        max_questions=settings.MAX_QUESTIONS,
+        followup_depth=session.followup_depth,
+        max_followups=settings.MAX_FOLLOWUPS_PER_TOPIC,
+        topics_remaining=max(0, len(plan) - (idx + 1)),
+    )
+
+    # 1) Persist the assessment of the answer we just received.
+    db.add(
+        Answer(
+            question_id=current_q.id,
+            text=text,
+            quality=result["quality"],
+            score=result["score"],
+            feedback=result["note"],
+        )
+    )
+
+    action = result["action"]
+
+    # 2) Conclude?
+    if action == "conclude":
+        db.commit()
+        db.refresh(session)
         finalize(db, session, role_label=role["label"])
-    return answer
+        return {"reply": result["reply"], "done": True}
+
+    # 3) Advance vs follow-up -> create the next interviewer question.
+    if action == "advance" and next_topic is not None:
+        session.topic_index = idx + 1
+        session.followup_depth = 0
+        topic, kind, ctx, query = next_topic, "question", next_context, next_query
+    else:  # follow_up (stay on current topic, deeper)
+        session.followup_depth += 1
+        topic, kind, ctx, query = current_topic, "follow_up", current_context, current_q.retrieval_query
+
+    db.add(
+        Question(
+            session_id=session.id,
+            order_index=asked_count,
+            text=result["reply"],
+            topic=topic,
+            kind=kind,
+            difficulty=session.resume_profile.get("seniority", "mid"),
+            retrieval_query=query,
+            context_sources=ctx,
+        )
+    )
+    db.commit()
+    return {"reply": result["reply"], "done": False}
 
 
 def finalize(db: Session, session: InterviewSession, *, role_label: str) -> InterviewSession:
@@ -150,7 +203,7 @@ def finalize(db: Session, session: InterviewSession, *, role_label: str) -> Inte
     summary = analysis.build_summary(
         role_label=role_label,
         profile=session.resume_profile,
-        transcript=_transcript(session),
+        transcript=transcript(session),
     )
     session.summary = summary
     session.status = "completed"
@@ -160,6 +213,21 @@ def finalize(db: Session, session: InterviewSession, *, role_label: str) -> Inte
     return session
 
 
-def remaining(session: InterviewSession) -> int:
-    total = min(settings.NUM_QUESTIONS, len(session.focus_topics))
-    return max(0, total - _answered_count(session))
+def transcript(session: InterviewSession) -> list[dict]:
+    items = []
+    for q in _sorted_questions(session):
+        items.append(
+            {
+                "order_index": q.order_index,
+                "topic": q.topic,
+                "kind": q.kind,
+                "difficulty": q.difficulty,
+                "question": q.text,
+                "answer": q.answer.text if q.answer else None,
+                "quality": q.answer.quality if q.answer else None,
+                "score": q.answer.score if q.answer else None,
+                "feedback": q.answer.feedback if q.answer else None,
+                "context_sources": q.context_sources,
+            }
+        )
+    return items

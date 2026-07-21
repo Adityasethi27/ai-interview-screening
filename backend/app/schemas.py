@@ -6,14 +6,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-# ---- Roles ----
 class RoleInfo(BaseModel):
     id: str
     label: str
     description: str
 
 
-# ---- Resume profile ----
 class ResumeProfile(BaseModel):
     skills: list[str] = []
     technologies: list[str] = []
@@ -22,64 +20,45 @@ class ResumeProfile(BaseModel):
     summary: str = ""
 
 
-# ---- Session lifecycle ----
-class StartSessionResponse(BaseModel):
-    session_id: str
-    role: str
-    candidate_name: str
-    profile: ResumeProfile
-    focus_topics: list[str]
-    total_questions: int
-
-
 class ContextSource(BaseModel):
     source: str
     snippet: str
     score: float
 
 
-class QuestionOut(BaseModel):
-    id: str
-    order_index: int
-    text: str
-    topic: str
-    difficulty: str
-    retrieval_query: str = ""
-    context_sources: list[ContextSource] = []
-    answered: bool = False
-
-
-class NextQuestionResponse(BaseModel):
+# ---- Session start (returns the opening chat message) ----
+class StartSessionResponse(BaseModel):
     session_id: str
-    question: QuestionOut | None
-    remaining: int
-    finished: bool
+    role: str
+    candidate_name: str
+    profile: ResumeProfile
+    focus_topics: list[str]
+    opening: str  # the interviewer's first message
 
 
-class SubmitAnswerRequest(BaseModel):
-    question_id: str
-    answer: str = Field(min_length=1)
+# ---- One conversational turn ----
+class MessageRequest(BaseModel):
+    text: str = Field(min_length=1)
 
 
-class AnswerEvaluation(BaseModel):
-    score: float
-    feedback: str
-
-
-class SubmitAnswerResponse(BaseModel):
-    evaluation: AnswerEvaluation
-    remaining: int
-    finished: bool
+class MessageResponse(BaseModel):
+    reply: str
+    done: bool
 
 
 # ---- Final summary ----
-class QAItem(BaseModel):
+class TopicRating(BaseModel):
+    topic: str
+    rating: str
+
+
+class TranscriptItem(BaseModel):
     order_index: int
     topic: str
-    difficulty: str
+    kind: str
     question: str
     answer: str | None
-    score: float | None
+    quality: str | None
     feedback: str | None
     context_sources: list[ContextSource] = []
 
@@ -93,9 +72,10 @@ class SessionSummary(BaseModel):
     completed_at: datetime | None
     profile: ResumeProfile
     focus_topics: list[str]
-    overall_score: float | None
-    verdict: str
+    overall_rating: str
+    headline: str
+    topic_ratings: list[TopicRating]
     strengths: list[str]
     areas_to_improve: list[str]
     narrative: str
-    transcript: list[QAItem]
+    transcript: list[TranscriptItem]

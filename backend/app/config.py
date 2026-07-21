@@ -21,7 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # .../backend
 class Settings:
     # --- LLM / embeddings (Google Gemini) ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-flash-latest")
+    # Fallback models tried (in order) when the primary hits its daily free-tier cap.
+    LLM_FALLBACKS: list[str] = os.getenv(
+        "LLM_FALLBACKS", "gemini-2.0-flash,gemini-2.5-flash,gemini-flash-lite-latest"
+    ).split(",")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 
     # --- Vector store (Chroma, persisted on disk) ---
@@ -41,8 +45,13 @@ class Settings:
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "150"))
     RETRIEVAL_K: int = int(os.getenv("RETRIEVAL_K", "5"))
 
-    # --- Interview behaviour ---
-    NUM_QUESTIONS: int = int(os.getenv("NUM_QUESTIONS", "6"))
+    # --- Interview behaviour (adaptive conversational agent) ---
+    # Target number of distinct topics to walk through (the "coverage plan").
+    NUM_TOPICS: int = int(os.getenv("NUM_TOPICS", "4"))
+    # Hard cap on total interviewer questions (topics + follow-ups) so a session ends.
+    MAX_QUESTIONS: int = int(os.getenv("MAX_QUESTIONS", "6"))
+    # Max consecutive follow-up probes on a single topic before moving on.
+    MAX_FOLLOWUPS_PER_TOPIC: int = int(os.getenv("MAX_FOLLOWUPS_PER_TOPIC", "2"))
 
     # --- API ---
     CORS_ORIGINS: list[str] = os.getenv(

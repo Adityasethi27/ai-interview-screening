@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from functools import lru_cache
 
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
@@ -15,13 +16,29 @@ from app.config import settings
 
 
 @lru_cache
-def get_llm() -> ChatGoogleGenerativeAI:
+def get_llm(model: str | None = None) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(
-        model=settings.LLM_MODEL,
+        model=model or settings.LLM_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.4,
         convert_system_message_to_human=True,
+        # Disable the SDK's slow internal retry (it blocks ~35s on 429);
+        # our own fast backoff + model fallback in complete() handles limits.
+        max_retries=0,
     )
+
+
+def _models_to_try() -> list[str]:
+    """Primary model first, then fallbacks — lets us survive a single model's
+    daily free-tier cap by rolling over to another model."""
+    chain = [settings.LLM_MODEL] + settings.LLM_FALLBACKS
+    seen, out = set(), []
+    for m in chain:
+        m = m.strip()
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
 
 
 @lru_cache
@@ -43,13 +60,29 @@ def _content_to_text(content) -> str:
 
 
 def complete(prompt: str, system: str | None = None) -> str:
-    """Single-shot completion returning plain text."""
+    """Single-shot completion returning plain text, with backoff on rate limits."""
     messages = []
     if system:
         messages.append(("system", system))
     messages.append(("human", prompt))
-    resp = get_llm().invoke(messages)
-    return _content_to_text(resp.content).strip()
+
+    last_exc: Exception | None = None
+    for model in _models_to_try():
+        for attempt in range(2):
+            try:
+                resp = get_llm(model).invoke(messages)
+                return _content_to_text(resp.content).strip()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                msg = str(exc)
+                is_rate = "RESOURCE_EXHAUSTED" in msg or "429" in msg
+                if is_rate and attempt == 0:
+                    time.sleep(2)  # brief backoff, then one more try on this model
+                    continue
+                # Rate-limited again -> roll over to the next fallback model.
+                # Any other (hard) error also breaks to the next model.
+                break
+    raise last_exc  # type: ignore[misc]
 
 
 def complete_json(prompt: str, system: str | None = None) -> dict | list:
