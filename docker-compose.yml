@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gemini-2.5-flash}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-models/gemini-embedding-001}
+      - NUM_QUESTIONS=${NUM_QUESTIONS:-6}
+      # Allow the nginx-served frontend origin.
+      - CORS_ORIGINS=http://localhost,http://localhost:80,http://localhost:5173
+    volumes:
+      # Persist the SQLite DB and Chroma store across restarts.
+      - backend_storage:/app/storage
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  backend_storage:
