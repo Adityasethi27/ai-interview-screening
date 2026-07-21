@@ -50,10 +50,11 @@ h1, h3 { letter-spacing: -0.02em; }
   box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 12px 40px rgba(0,0,0,0.05);
 }
 .mark {
-  font-weight: 700; font-size: 15px; letter-spacing: 0.02em;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-weight: 700; font-size: 16px; letter-spacing: -0.01em;
   color: var(--accent); margin-bottom: 22px;
 }
-.mark span { color: var(--ink-faint); margin: 0 1px; }
+.mark-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .setup-card h1 { font-size: 25px; margin: 0 0 8px; }
 .sub { color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; margin: 0 0 24px; }
 

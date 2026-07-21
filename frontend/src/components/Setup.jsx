@@ -42,7 +42,7 @@ export default function Setup({ onStart }) {
   return (
     <div className="setup-wrap">
       <div className="setup-card">
-        <div className="mark">av<span>·</span>a</div>
+        <div className="mark"><span className="mark-dot" />Ava</div>
         <h1>Technical screening</h1>
         <p className="sub">
           A short, adaptive interview. Ava reads your resume, asks grounded
