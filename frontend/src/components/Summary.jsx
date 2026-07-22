@@ -10,6 +10,34 @@ const BAND = {
   Exceptional: "b-top",
 };
 
+// Per-answer quality → badge tone (green / amber / red).
+const QUALITY = {
+  strong: "q-good",
+  good: "q-good",
+  solid: "q-good",
+  partial: "q-mid",
+  developing: "q-mid",
+  mixed: "q-mid",
+  weak: "q-low",
+  confused: "q-low",
+  "off-topic": "q-low",
+  off_topic: "q-low",
+};
+
+// Bold the short "Label: detail" lead-in so recruiters can scan.
+function Bullet({ text }) {
+  const i = text.indexOf(":");
+  if (i > 1 && i <= 42) {
+    return (
+      <li>
+        <strong>{text.slice(0, i)}</strong>
+        {text.slice(i + 1)}
+      </li>
+    );
+  }
+  return <li>{text}</li>;
+}
+
 export default function Summary({ sessionId, onRestart }) {
   const [s, setS] = useState(null);
   const [error, setError] = useState("");
@@ -22,17 +50,19 @@ export default function Summary({ sessionId, onRestart }) {
   if (error) return <div className="report"><div className="err">{error}</div></div>;
   if (!s) return <div className="report loading">Compiling your assessment…</div>;
 
+  const initial = (s.candidate_name || "You").trim().charAt(0).toUpperCase() || "Y";
+
   return (
     <div className="report">
       <div className="report-top">
-        <div>
+        <div className="report-head-row">
           <div className="eyebrow">Assessment · {s.role}</div>
-          <h1>{s.candidate_name}</h1>
-          {s.headline && <p className="headline">{s.headline}</p>}
+          <div className={"band " + (BAND[s.overall_rating] || "b-mid")}>
+            {s.overall_rating}
+          </div>
         </div>
-        <div className={"band " + (BAND[s.overall_rating] || "b-mid")}>
-          {s.overall_rating}
-        </div>
+        <h1>{s.candidate_name}</h1>
+        {s.headline && <p className="headline">{s.headline}</p>}
       </div>
 
       {s.topic_ratings?.length > 0 && (
@@ -50,13 +80,17 @@ export default function Summary({ sessionId, onRestart }) {
         <section>
           <h3>Strengths</h3>
           <ul className="good">
-            {s.strengths.length ? s.strengths.map((x, i) => <li key={i}>{x}</li>) : <li className="dim">—</li>}
+            {s.strengths.length
+              ? s.strengths.map((x, i) => <Bullet key={i} text={x} />)
+              : <li className="dim">—</li>}
           </ul>
         </section>
         <section>
           <h3>Areas to improve</h3>
           <ul className="work">
-            {s.areas_to_improve.length ? s.areas_to_improve.map((x, i) => <li key={i}>{x}</li>) : <li className="dim">—</li>}
+            {s.areas_to_improve.length
+              ? s.areas_to_improve.map((x, i) => <Bullet key={i} text={x} />)
+              : <li className="dim">—</li>}
           </ul>
         </section>
       </div>
@@ -74,20 +108,39 @@ export default function Summary({ sessionId, onRestart }) {
 
       {open && (
         <div className="transcript">
-          {s.transcript.map((t) => (
-            <div className="tx" key={t.order_index}>
-              <div className="tx-meta">
-                <span className="tx-topic">{t.topic}</span>
-                {t.kind === "follow_up" && <span className="tx-follow">follow-up</span>}
-                {t.quality && <span className="tx-q">{t.quality}</span>}
+          {s.transcript.map((t) => {
+            const q = (t.quality || "").toLowerCase();
+            const sources = t.context_sources?.length
+              ? [...new Set(t.context_sources.map((c) => c.source))]
+              : [];
+            return (
+              <div className="tx" key={t.order_index}>
+                <div className="tx-meta">
+                  {t.quality && (
+                    <span className={"tx-q " + (QUALITY[q] || "q-mid")}>{t.quality}</span>
+                  )}
+                  <span className="tx-topic">{t.topic}</span>
+                  {t.kind === "follow_up" && <span className="tx-follow">follow-up</span>}
+                </div>
+
+                <div className="tx-turn">
+                  <span className="tx-avatar ava">A</span>
+                  <p className="tx-text"><span className="tx-name">Ava</span>{t.question}</p>
+                </div>
+
+                {t.answer && (
+                  <div className="tx-turn you">
+                    <span className="tx-avatar you">{initial}</span>
+                    <p className="tx-text"><span className="tx-name">{s.candidate_name || "You"}</span>{t.answer}</p>
+                  </div>
+                )}
+
+                {sources.length > 0 && (
+                  <p className="tx-src">Grounded in {sources.join(", ")}</p>
+                )}
               </div>
-              <p className="tx-ava"><b>Ava</b> {t.question}</p>
-              {t.answer && <p className="tx-you"><b>You</b> {t.answer}</p>}
-              {t.context_sources?.length > 0 && (
-                <p className="tx-src">grounded in {[...new Set(t.context_sources.map((c) => c.source))].join(", ")}</p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

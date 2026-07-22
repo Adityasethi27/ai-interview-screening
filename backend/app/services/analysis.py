@@ -55,8 +55,8 @@ Return STRICT JSON:
   "overall_rating": "one of {BANDS}",
   "headline": "<one vivid sentence summarising the candidate's performance>",
   "topic_ratings": [{{"topic": "<topic>", "rating": "one of {BANDS}"}}, ...],
-  "strengths": ["<2-4 specific strengths, cite concrete answers>"],
-  "areas_to_improve": ["<2-4 specific gaps>"],
+  "strengths": ["<2-4 items. Each MUST start with a 2-4 word label, then ': ', then one concrete sentence citing an answer. e.g. 'Async fundamentals: explained the event loop and where asyncio helps'>"],
+  "areas_to_improve": ["<2-4 items, same 'Short label: one concrete sentence' format>"],
   "narrative": "<3-4 sentences referencing concrete moments in the interview>"
 }}
 """
