@@ -42,11 +42,15 @@ export default function Setup({ onStart }) {
   return (
     <div className="setup-wrap">
       <div className="setup-card">
-        <div className="mark"><span className="mark-dot" />Ava</div>
+        <div className="mark">
+          <span className="avatar">A</span>
+          <span className="mark-name">Ava</span>
+        </div>
         <h1>Let's talk through your experience.</h1>
         <p className="sub">
           A short, conversational screening — usually under ten minutes. Answer in
-          your own words; Ava will follow up on what you say.
+          your own words, and we'll ask a few follow-up questions based on what you
+          share.
         </p>
 
         <form onSubmit={start}>
@@ -96,7 +100,11 @@ export default function Setup({ onStart }) {
                   hidden
                   onChange={(e) => setFile(e.target.files[0] || null)}
                 />
-                {file ? <span className="fname">{file.name}</span> : "Choose a resume file"}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                  <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
+                </svg>
+                {file ? <span className="fname">{file.name}</span> : "Attach your resume (PDF or text)"}
               </button>
             ) : (
               <textarea
@@ -112,11 +120,11 @@ export default function Setup({ onStart }) {
           {error && <div className="err">{error}</div>}
 
           <button className="go" disabled={!ready || loading}>
-            {loading ? "Preparing…" : "Begin"}
+            {loading ? "Getting your interview ready…" : "Let's begin"}
           </button>
         </form>
       </div>
-      <div className="setup-foot">Your responses are used only to generate this assessment.</div>
+      <div className="setup-foot">Your responses simply help us get to know your background.</div>
     </div>
   );
 }

@@ -61,8 +61,8 @@ export default function Chat({ session, onFinish }) {
     <div className="chat">
       <header className="chat-head">
         <div className="ava-id">
-          <span className="mark-dot" />
-          Ava
+          <span className="avatar">A</span>
+          <span className="mark-name">Ava</span>
         </div>
         <div className="who-info">
           {session.candidate_name} · {session.role.replace(/_/g, " ")}
