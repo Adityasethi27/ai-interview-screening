@@ -43,35 +43,42 @@ export default function Setup({ onStart }) {
     <div className="setup-wrap">
       <div className="setup-card">
         <div className="mark"><span className="mark-dot" />Ava</div>
-        <h1>Technical screening</h1>
+        <h1>Let's talk through your experience.</h1>
         <p className="sub">
-          A short, adaptive interview. Ava reads your resume, asks grounded
-          questions, and follows up where it matters.
+          A short, conversational screening — usually under ten minutes. Answer in
+          your own words; Ava will follow up on what you say.
         </p>
 
         <form onSubmit={start}>
-          <input
-            className="text-in"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-
-          <div className="seg">
-            {roles.map((r) => (
-              <button
-                type="button"
-                key={r.id}
-                className={role === r.id ? "on" : ""}
-                onClick={() => setRole(r.id)}
-                title={r.description}
-              >
-                {r.label}
-              </button>
-            ))}
+          <div className="field">
+            <span className="overline">Your name</span>
+            <input
+              className="text-in"
+              placeholder="Jordan Lee"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
 
-          <div className="resume">
+          <div className="field">
+            <span className="overline">Role</span>
+            <div className="seg">
+              {roles.map((r) => (
+                <button
+                  type="button"
+                  key={r.id}
+                  className={role === r.id ? "on" : ""}
+                  onClick={() => setRole(r.id)}
+                  title={r.description}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field resume">
+            <span className="overline">Resume</span>
             <div className="resume-tabs">
               <button type="button" className={mode === "file" ? "on" : ""} onClick={() => setMode("file")}>
                 Upload PDF
@@ -105,11 +112,11 @@ export default function Setup({ onStart }) {
           {error && <div className="err">{error}</div>}
 
           <button className="go" disabled={!ready || loading}>
-            {loading ? "Preparing your interview…" : "Start interview"}
+            {loading ? "Preparing…" : "Begin"}
           </button>
         </form>
       </div>
-      <div className="setup-foot">Grounded in a role-specific knowledge base · RAG + Gemini</div>
+      <div className="setup-foot">Your responses are used only to generate this assessment.</div>
     </div>
   );
 }

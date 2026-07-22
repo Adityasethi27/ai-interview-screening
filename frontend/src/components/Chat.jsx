@@ -61,8 +61,8 @@ export default function Chat({ session, onFinish }) {
     <div className="chat">
       <header className="chat-head">
         <div className="ava-id">
-          <span className="dot" />
-          Ava · interviewer
+          <span className="mark-dot" />
+          Ava
         </div>
         <div className="who-info">
           {session.candidate_name} · {session.role.replace(/_/g, " ")}
@@ -95,21 +95,29 @@ export default function Chat({ session, onFinish }) {
       <div className="composer">
         {done ? (
           <button className="finish" onClick={onFinish}>
-            See your assessment →
+            View your results
           </button>
         ) : (
           <div className="input-row">
             <textarea
               ref={taRef}
               rows={1}
-              placeholder="Type your answer…"
+              placeholder="Type your response"
               value={input}
               onChange={grow}
               onKeyDown={onKey}
               disabled={pending}
             />
-            <button className="send" onClick={send} disabled={pending || !input.trim()}>
-              ↑
+            <button
+              className="send"
+              onClick={send}
+              disabled={pending || !input.trim()}
+              aria-label="Send"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="6 11 12 5 18 11" />
+              </svg>
             </button>
           </div>
         )}
