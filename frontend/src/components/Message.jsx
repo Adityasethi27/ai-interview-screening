@@ -12,7 +12,7 @@ export default function Message({ role, text, animate, onReveal }) {
 
   return (
     <div className={"msg " + (isAva ? "ava" : "you")}>
-      {isAva && <div className="who">Ava</div>}
+      {isAva && <span className="avatar">A</span>}
       <div className="bubble">{isAva && animate ? shown : text}</div>
     </div>
   );

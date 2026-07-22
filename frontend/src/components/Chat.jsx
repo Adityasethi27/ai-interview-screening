@@ -82,7 +82,7 @@ export default function Chat({ session, onFinish }) {
           ))}
           {pending && (
             <div className="msg ava">
-              <div className="who">Ava</div>
+              <span className="avatar">A</span>
               <div className="bubble typing">
                 <span /><span /><span />
               </div>
